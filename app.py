@@ -55,13 +55,20 @@ class PDFRelatorio(FPDF):
                 self.ln(1)
 
     def limpar_caracteres_especiais(self, texto):
+        # Substitui caracteres problemáticos mantendo Ω e outros símbolos técnicos
         substituicoes = {
-            '–': '-', '—': '-', '´': "'", '“': '"', '”': '"', '‘': "'", '’': "'",
-            '…': '...', '®': '(R)', '©': '(C)', '™': '(TM)'
+            '–': '-', '—': '-', '´': "'", '“': '"', '”': '"', 
+            '‘': "'", '’': "'", '…': '...', '®': '(R)', 
+            '©': '(C)', '™': '(TM)'
         }
         for orig, sub in substituicoes.items():
             texto = texto.replace(orig, sub)
-        return texto
+        
+        # Mantém Ω e outros símbolos técnicos
+        try:
+            return texto.encode('latin-1', 'ignore').decode('latin-1')
+        except:
+            return texto
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -293,37 +300,55 @@ Faça uma análise técnica detalhada considerando todas essas informações.
     return response.text
 
 def criar_pdf(relatorio, output):
-    pdf = PDFRelatorio()
-    pdf.add_relatorio(relatorio)
-    pdf.output(output)
+    try:
+        # Converter caracteres especiais antes de criar o PDF
+        relatorio = relatorio.encode('latin-1', 'replace').decode('latin-1')
+        
+        pdf = PDFRelatorio()
+        pdf.add_relatorio(relatorio)
+        pdf.output(output)
+    except Exception as e:
+        app.logger.error(f"Erro ao criar PDF: {str(e)}")
+        raise
 
 def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, observacoes, pdf_path):
-    mensagem = MIMEMultipart()
-    mensagem["From"] = email_origem
-    mensagem["To"] = email_destino
-    mensagem["Subject"] = assunto
+    try:
+        # Criar mensagem com codificação UTF-8
+        mensagem = MIMEMultipart()
+        mensagem["From"] = email_origem
+        mensagem["To"] = email_destino
+        mensagem["Subject"] = assunto
+        mensagem.preamble = 'This is a multi-part message in MIME format.'
 
-    corpo = f"""Relatório Técnico do Motor - {modelo_motor}
+        # Corpo do email com codificação UTF-8
+        corpo = f"""Relatório Técnico do Motor - {modelo_motor}
 
 Segue em anexo o relatório técnico gerado pelo sistema.
 
 """
-    if observacoes:
-        corpo += "\nObservações adicionais:\n" + observacoes
+        if observacoes:
+            corpo += "\nObservações adicionais:\n" + observacoes
 
-    mensagem.attach(MIMEText(corpo, "plain"))
+        # Parte 1: texto do email
+        part1 = MIMEText(corpo, _charset='utf-8')
+        mensagem.attach(part1)
 
-    # Anexar PDF
-    with open(pdf_path, "rb") as arquivo:
-        parte_pdf = MIMEApplication(arquivo.read(), _subtype="pdf")
-        parte_pdf.add_header("Content-Disposition", "attachment", filename=f"relatorio_{modelo_motor}.pdf")
-        mensagem.attach(parte_pdf)
+        # Parte 2: anexo PDF
+        with open(pdf_path, "rb") as arquivo:
+            part2 = MIMEApplication(arquivo.read(), _subtype="pdf")
+            part2.add_header('Content-Disposition', 'attachment', 
+                           filename=f"relatorio_{modelo_motor}.pdf")
+            mensagem.attach(part2)
 
-    # Enviar e-mail
-    with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
-        servidor.starttls()
-        servidor.login(email_origem, senha_app)
-        servidor.send_message(mensagem)
+        # Enviar email
+        with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
+            servidor.starttls()
+            servidor.login(email_origem, senha_app)
+            servidor.send_message(mensagem, from_addr=email_origem, to_addrs=email_destino)
+
+    except Exception as e:
+        app.logger.error(f"Erro ao enviar email: {str(e)}")
+        raise Exception(f"Erro ao enviar e-mail: {str(e)}")
 
 @app.route('/limpar', methods=['POST'])
 def limpar_campos():
