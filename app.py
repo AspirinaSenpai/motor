@@ -16,6 +16,7 @@ import docx
 import tempfile
 import uuid
 from io import BytesIO
+from datetime import datetime 
 
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta_aqui'  # Altere para uma chave segura em produção
@@ -313,37 +314,39 @@ def criar_pdf(relatorio, output):
 
 def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, observacoes, pdf_path):
     try:
-        # Configuração com timeout
+        # Configuração da mensagem
         msg = MIMEMultipart()
         msg['From'] = email_origem
         msg['To'] = email_destino
         msg['Subject'] = assunto
         
-        # Corpo em UTF-8
+        # Corpo do e-mail com timestamp corrigido
         corpo = f"""
         Relatório Técnico - {modelo_motor}
         Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+        
+        Observações:
+        {observacoes if observacoes else "Nenhuma observação adicional"}
         """
+        
         msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
         
-        # Anexo
-        with open(pdf_path, "rb") as f:
-            attach = MIMEApplication(f.read(), _subtype="pdf")
-            attach.add_header('Content-Disposition', 'attachment', filename=f"Relatorio_{modelo_motor}.pdf")
-            msg.attach(attach)
+        # Anexar PDF
+        with open(pdf_path, 'rb') as f:
+            part = MIMEApplication(f.read(), _subtype='pdf')
+            part.add_header('Content-Disposition', 'attachment', filename=f'Relatorio_{modelo_motor}.pdf')
+            msg.attach(part)
         
-        # Envio com tratamento de erro específico
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
-            server.ehlo()
+        # Enviar e-mail
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
             server.starttls()
-            server.login(email_origem, senha_app)  # Usa a SENHA DE APP aqui
+            server.login(email_origem, senha_app)
             server.send_message(msg)
             
-    except smtplib.SMTPAuthenticationError:
-        raise Exception("Falha na autenticação. Verifique: 1) Se a senha de app está correta 2) Se a verificação em duas etapas está ativa")
     except Exception as e:
-        raise Exception(f"Erro no envio: {str(e)}")
-
+        app.logger.error(f"Erro no envio de e-mail: {str(e)}")
+        raise Exception(f"Erro ao enviar e-mail: {str(e)}")
+        
 @app.route('/limpar', methods=['POST'])
 def limpar_campos():
     return jsonify({'status': 'success', 'message': 'Campos limpos com sucesso!'})
