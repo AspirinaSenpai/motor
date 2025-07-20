@@ -209,28 +209,48 @@ def extrair_texto_manual(arquivo):
         return ""
 
 def ler_planilha():
-    SERVICE_ACCOUNT_FILE = os.path.join(os.getcwd(), 'clean-doodad-465817-a7-680ac32aa1fd.json')
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
+    try:
+        SERVICE_ACCOUNT_FILE = os.path.join(os.getcwd(), 'clean-doodad-465817-a7-680ac32aa1fd.json')
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+        SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
 
-    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        # Autenticação
+        creds = Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE,
+            scopes=SCOPES
+        )
+        
+        # Força a atualização do token
+        creds.refresh(Request())
+        
+        # Acesso à planilha
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        
+        # Processamento dos dados
+        valores = sheet.get_all_values()
+        
+        if not valores:
+            return {}
 
-    valores = sheet.get_all_values()
-    cabecalho = valores[0]
-    ult_linha = valores[-1]
-    ultimo_dado = dict(zip(cabecalho, ult_linha))
+        cabecalho = valores[0]
+        ult_linha = valores[-1] if len(valores) > 1 else cabecalho
+        ultimo_dado = dict(zip(cabecalho, ult_linha))
 
-    for chave in ultimo_dado:
-        valor = ultimo_dado[chave]
-        if isinstance(valor, str) and "," in valor:
-            try:
-                ultimo_dado[chave] = float(valor.replace(",", "."))
-            except:
-                pass
+        # Conversão de valores numéricos
+        for chave in ultimo_dado:
+            valor = ultimo_dado[chave]
+            if isinstance(valor, str) and "," in valor:
+                try:
+                    ultimo_dado[chave] = float(valor.replace(",", "."))
+                except ValueError:
+                    pass  # Mantém como string se não puder converter
 
-    return ultimo_dado
+        return ultimo_dado
+
+    except Exception as e:
+        print(f"Erro ao acessar planilha: {str(e)}")
+        return {}  # Retorna dicionário vazio em caso de erro
 
 def gerar_relatorio_ia(modelo_motor, corrente_nominal, tensao_nominal, tipo_ligacao, observacoes, manual_file):
     genai.configure(api_key="AIzaSyAza9XWD0-nyO2FRwhWzowIl9e1_k-FJgs")
