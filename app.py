@@ -313,42 +313,36 @@ def criar_pdf(relatorio, output):
 
 def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, observacoes, pdf_path):
     try:
-        # Criar mensagem com codificação UTF-8
-        mensagem = MIMEMultipart()
-        mensagem["From"] = email_origem
-        mensagem["To"] = email_destino
-        mensagem["Subject"] = assunto
-        mensagem.preamble = 'This is a multi-part message in MIME format.'
-
-        # Corpo do email com codificação UTF-8
-        corpo = f"""Relatório Técnico do Motor - {modelo_motor}
-
-Segue em anexo o relatório técnico gerado pelo sistema.
-
-"""
-        if observacoes:
-            corpo += "\nObservações adicionais:\n" + observacoes
-
-        # Parte 1: texto do email
-        part1 = MIMEText(corpo, _charset='utf-8')
-        mensagem.attach(part1)
-
-        # Parte 2: anexo PDF
-        with open(pdf_path, "rb") as arquivo:
-            part2 = MIMEApplication(arquivo.read(), _subtype="pdf")
-            part2.add_header('Content-Disposition', 'attachment', 
-                           filename=f"relatorio_{modelo_motor}.pdf")
-            mensagem.attach(part2)
-
-        # Enviar email
-        with smtplib.SMTP("smtp.gmail.com", 587) as servidor:
-            servidor.starttls()
-            servidor.login(email_origem, senha_app)
-            servidor.send_message(mensagem, from_addr=email_origem, to_addrs=email_destino)
-
+        # Configuração com timeout
+        msg = MIMEMultipart()
+        msg['From'] = email_origem
+        msg['To'] = email_destino
+        msg['Subject'] = assunto
+        
+        # Corpo em UTF-8
+        corpo = f"""
+        Relatório Técnico - {modelo_motor}
+        Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+        """
+        msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
+        
+        # Anexo
+        with open(pdf_path, "rb") as f:
+            attach = MIMEApplication(f.read(), _subtype="pdf")
+            attach.add_header('Content-Disposition', 'attachment', filename=f"Relatorio_{modelo_motor}.pdf")
+            msg.attach(attach)
+        
+        # Envio com tratamento de erro específico
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(email_origem, senha_app)  # Usa a SENHA DE APP aqui
+            server.send_message(msg)
+            
+    except smtplib.SMTPAuthenticationError:
+        raise Exception("Falha na autenticação. Verifique: 1) Se a senha de app está correta 2) Se a verificação em duas etapas está ativa")
     except Exception as e:
-        app.logger.error(f"Erro ao enviar email: {str(e)}")
-        raise Exception(f"Erro ao enviar e-mail: {str(e)}")
+        raise Exception(f"Erro no envio: {str(e)}")
 
 @app.route('/limpar', methods=['POST'])
 def limpar_campos():
