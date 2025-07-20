@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "gen-lang-client-0707507427",
+  "private_key_id": "c275385a009d33a8a9476e891ccb394f233ef5f1",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDaHTkzgNQWQpvv\nacuaGhNYwpJpHXDuWA5En5GuLhd2MUiNJaqlSgB85qIeo7OWbtuL8jy1ATWd5HFA\n4d3yEclEEKcjy7RmIqSRJqg19Xppwp851uG2FysddHh1CTATwq2f48YHn4ebkuEb\nNQHE4yJ/qop5fAq3t7DQzAlflvs8PYnG3tjzBtueFbs47YmmLrkEcjLoq86yd6M5\nahBqtqoLyQhYeG8V64l5oqGz9Au/0cgQigjS1ZGxWla8bqfuglOygnI75YTz20oX\nridz1pjoYEGfeXjF63krLQ8FC8J3UqNe1O+C5wrwHq4ZbmE7qYjfM4Zurq32LmyF\nntniURdbAgMBAAECggEATphMNeZcxj6vUQiW4Ms3oHrQZkdBG+moDotPY+vg8WqV\n4aKqiJAPd/JlhdPoUTNWMmoR/QlYCDK6qq4ZG3LUSw4TJD9xnIIsOc+runHf7/89\nAAsR31se4qjHBSlP5Tb3+I8Lm1CdfW5iZjrmDcvo8QcDif4sIIJ1GPAFCqhtlIlP\n5l9iWteElnQDS9TfTOHqNyk6ANZSAU+xx2/8g7Rlphm77vgrw6+dT1Tyk7koPtQ8\nwKFWZ1Dpe3ElxvK2zXwnyLwfLYeyIXi6GoV58jwd5DwT9sHXKDZMIjrfGrvATU6r\na3P4KLLyeDATXX9BmrBjg8y5pF1VLjfxkUa4usl6hQKBgQDxuEvwOoaMWC+AbplL\nAIJo0GuFePfPbaVakSuGcR0WZ5ZfkD97ZU6ab9dXd3FiXMNXNvfDtSwIqArB8Sun\nzwJBtxVbRzS36KJcm35k23/hYBeMy727LNe6ooMZdMRyk0hmt7kU8W0oKho1FZF+\nKHZrwxYKBMcsQRvbDZSsawLinwKBgQDm/+uJhhm2SJ6B3H2AaaidnP5jZWmBCX7Z\npTH95kXFi3/bwE1upH6tq+4khV8GPtQEFFHRgeZBFG0dBJ+bVTWNBAdp5iZRvngK\nEB5NV/wA7E1+4cYSiAwlmRpskra6ivW2tU4wjrMor9JGpQkhePrLwwr+NaHqqFFJ\njqC9LoVtxQKBgQC4Vl77Hfbb8qiPHkkjLIlHW6KT0FPTyX9vmQQDbCHNo0PHLx9q\ngDC4kBA+MOW0KKAD0/SROIoTM+u4Sa6MM885xGCyEpR+qBeh3ic+zTIx8vEiu4G+\ny4zdVO/7qtPhuLZfNz8bXJ5tIeaIkyE4f60Hs2gMTeaCtkiC/lFiR92UawKBgQCW\nPcNzGc4lWcwGSGM0HwR1JsPp3+6j54oigqgmLBwbJOUPB18VZFWkHVvxUvF//WMm\nGBUy/5rDn0ZshjJM9Dm1MvajcPZhWlF2sg8TXPNhok+xA6UxLl1AIvklvrKsV28C\n2580Q8vQ3bIVEogCxk3QM1Y2Cqn6FmlwPxzajqRnxQKBgFrCjPbzId6ZXIK92HX5\n0crQNCR7WVSRvpAnD0hUEaz8X6796rJqHf7lwrX/BOvjyFcG/q0qkSh0PrqUStO0\nO5Lz9cK7QztxG4hzo/BLxa22XlzJ4VOz5oIj036xz5OODlbWjD33EUJ0q3SV/Xh0\nfLFFVVUerJDG0cC4dRbqfec/\n-----END PRIVATE KEY-----\n",
+  "client_email": "hackeetica@gen-lang-client-0707507427.iam.gserviceaccount.com",
+  "client_id": "111091331503993936886",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/hackeetica%40gen-lang-client-0707507427.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
