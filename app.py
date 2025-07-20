@@ -210,7 +210,7 @@ def extrair_texto_manual(arquivo):
 
 def ler_planilha():
     try:
-        SERVICE_ACCOUNT_FILE = os.path.join(os.getcwd(), 'clean-doodad-465817-a7-680ac32aa1fd.json')
+        SERVICE_ACCOUNT_FILE = os.path.join(os.getcwd(), 'gen-lang-client-0707507427-c275385a009d.json')
         SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
         SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
 
