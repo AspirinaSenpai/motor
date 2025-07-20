@@ -18,6 +18,8 @@ import uuid
 from io import BytesIO
 from datetime import datetime 
 
+
+current_time = time.strftime('%d/%m/%Y %H:%M')
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta_aqui'  # Altere para uma chave segura em produção
 
@@ -40,10 +42,11 @@ class PDFRelatorio(FPDF):
         self.set_font("Helvetica", size=12)
 
     def header(self):
+        # Usando datetime.datetime para consistência
+        data = datetime.datetime.now().strftime("Data: %d/%m/%Y - %H:%M:%S")
         self.set_font("Helvetica", 'B', 14)
         self.cell(0, 10, "Relatório Técnico do Motor", ln=True, align='C')
         self.set_font("Helvetica", '', 10)
-        data = datetime.datetime.now().strftime("Data da Análise: %d/%m/%Y - %H:%M")
         self.cell(0, 10, data, ln=True, align='C')
         self.ln(5)
 
@@ -320,10 +323,15 @@ def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, 
         msg['To'] = email_destino
         msg['Subject'] = assunto
         
-        # Corpo do e-mail com timestamp corrigido
+        # Data/hora com datetime.datetime (módulo completo)
+        data_atual = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        
+        # Corpo do e-mail
         corpo = f"""
-        Relatório Técnico - {modelo_motor}
-        Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+        RELATÓRIO TÉCNICO - MOTOR ELÉTRICO
+        ----------------------------------
+        Modelo: {modelo_motor}
+        Data: {data_atual}
         
         Observações:
         {observacoes if observacoes else "Nenhuma observação adicional"}
@@ -333,19 +341,30 @@ def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, 
         
         # Anexar PDF
         with open(pdf_path, 'rb') as f:
-            part = MIMEApplication(f.read(), _subtype='pdf')
-            part.add_header('Content-Disposition', 'attachment', filename=f'Relatorio_{modelo_motor}.pdf')
-            msg.attach(part)
+            anexo = MIMEApplication(f.read(), _subtype='pdf')
+            anexo.add_header(
+                'Content-Disposition',
+                'attachment',
+                filename=f'Relatorio_{modelo_motor}_{data_atual.replace("/","-").replace(":","-")}.pdf'
+            )
+            msg.attach(anexo)
         
-        # Enviar e-mail
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+        # Envio com tratamento de erros
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
+            server.ehlo()
             server.starttls()
             server.login(email_origem, senha_app)
             server.send_message(msg)
+            app.logger.info(f"E-mail enviado com sucesso para {email_destino} em {data_atual}")
             
+    except smtplib.SMTPException as e:
+        error_msg = f"Erro SMTP: {str(e)}"
+        app.logger.error(error_msg)
+        raise Exception(error_msg)
     except Exception as e:
-        app.logger.error(f"Erro no envio de e-mail: {str(e)}")
-        raise Exception(f"Erro ao enviar e-mail: {str(e)}")
+        error_msg = f"Erro inesperado: {str(e)}"
+        app.logger.error(error_msg)
+        raise Exception(error_msg)
         
 @app.route('/limpar', methods=['POST'])
 def limpar_campos():
