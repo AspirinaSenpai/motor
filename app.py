@@ -209,7 +209,7 @@ def extrair_texto_manual(arquivo):
         return ""
 
 def ler_planilha():
-    SERVICE_ACCOUNT_FILE = r"C:\Users\rubem\Pictures\clean-doodad-465817-a7-680ac32aa1fd.json"
+    SERVICE_ACCOUNT_FILE = os.path.join(os.getcwd(), 'clean-doodad-465817-a7-680ac32aa1fd.json')
     SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
     SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
 
@@ -311,3 +311,7 @@ def limpar_campos():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
