@@ -280,51 +280,57 @@ def criar_pdf(relatorio, output):
 
 def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, observacoes, pdf_path):
     try:
+        # Verificação inicial
+        if not all([email_origem, email_destino, senha_app]):
+            raise ValueError("E-mail remetente, destinatário e senha são obrigatórios")
+
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"Arquivo PDF não encontrado: {pdf_path}")
 
+        # Configuração da mensagem
         msg = MIMEMultipart()
         msg['From'] = email_origem
         msg['To'] = email_destino
         msg['Subject'] = assunto
         
-        data_atual = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        # Corpo do e-mail
         corpo = f"""
-RELATÓRIO TÉCNICO - MOTOR ELÉTRICO
-----------------------------------
-Modelo: {modelo_motor}
-Data: {data_atual}
-
-Observações:
-{observacoes if observacoes else "Nenhuma observação adicional"}
-"""
+        RELATÓRIO TÉCNICO - {modelo_motor}
+        Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+        
+        Observações:
+        {observacoes if observacoes else "Nenhuma observação adicional"}
+        """
         msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
 
+        # Anexar PDF
         with open(pdf_path, 'rb') as f:
-            anexo = MIMEApplication(f.read(), _subtype='pdf')
-            anexo.add_header(
-                'Content-Disposition',
-                'attachment',
-                filename=f'Relatorio_{modelo_motor}_{data_atual.replace("/","-").replace(":","-")}.pdf'
-            )
-            msg.attach(anexo)
+            part = MIMEApplication(f.read(), _subtype='pdf')
+            part.add_header('Content-Disposition', 'attachment', 
+                          filename=f'Relatorio_{modelo_motor}.pdf')
+            msg.attach(part)
 
+        # Envio com tratamento específico para erros SMTP
         with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
             server.ehlo()
             server.starttls()
-            server.login(email_origem, senha_app)
+            
+            try:
+                server.login(email_origem, senha_app)
+            except smtplib.SMTPAuthenticationError:
+                raise Exception("""
+                Falha na autenticação. Por favor:
+                1. Verifique se a verificação em duas etapas está ativada
+                2. Use uma senha de app (não sua senha normal do Gmail)
+                3. Gere uma nova senha de app se necessário
+                """)
+                
             server.send_message(msg)
-            logger.info(f"E-mail enviado para {email_destino}")
-
-    except smtplib.SMTPAuthenticationError:
-        error_msg = "Falha na autenticação. Verifique: 1) Se a senha de app está correta 2) Se a verificação em duas etapas está ativa"
-        logger.error(error_msg)
-        raise Exception(error_msg)
+            
     except Exception as e:
-        error_msg = f"Erro no envio de e-mail: {str(e)}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-
+        app.logger.error(f"Erro no envio de e-mail: {str(e)}")
+        raise
+        
 @app.route('/limpar', methods=['POST'])
 def limpar_campos():
     try:
