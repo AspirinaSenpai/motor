@@ -1,0 +1,7 @@
+flask
+fpdf
+gspread
+google-auth
+google-generativeai
+python-docx
+PyPDF2

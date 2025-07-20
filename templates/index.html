@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Relatório Técnico - Motores Elétricos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .form-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+        .btn-action {
+            margin-right: 10px;
+            min-width: 180px;
+        }
+        .file-input-label {
+            display: block;
+            padding: 10px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .file-input-label:hover {
+            border-color: #0d6efd;
+            background-color: #f8f9ff;
+        }
+        .file-name {
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        #loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Carregando...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="form-container">
+                    <h2 class="text-center mb-4">
+                        <i class="bi bi-gear-fill"></i> Gerador de Relatório Técnico - Motores Elétricos
+                    </h2>
+                    
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+                    
+                    <form id="mainForm" method="POST" enctype="multipart/form-data">
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <i class="bi bi-info-circle"></i> Informações do Motor
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="modelo_motor" class="form-label">Modelo do Motor:</label>
+                                        <input type="text" class="form-control" id="modelo_motor" name="modelo_motor" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="corrente_nominal" class="form-label">Corrente Nominal (A):</label>
+                                        <input type="text" class="form-control" id="corrente_nominal" name="corrente_nominal">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="tensao_nominal" class="form-label">Tensão Nominal (V):</label>
+                                        <input type="text" class="form-control" id="tensao_nominal" name="tensao_nominal">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="tipo_ligacao" class="form-label">Tipo de Ligação:</label>
+                                        <select class="form-select" id="tipo_ligacao" name="tipo_ligacao">
+                                            <option value="">Selecione...</option>
+                                            <option value="Estrela">Estrela</option>
+                                            <option value="Triângulo">Triângulo</option>
+                                            <option value="Estrela/Triângulo">Estrela/Triângulo</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <i class="bi bi-file-earmark-arrow-up"></i> Manual/Ficha Técnica (Opcional)
+                            </div>
+                            <div class="card-body">
+                                <label for="manual" class="file-input-label">
+                                    <i class="bi bi-upload fs-3"></i><br>
+                                    <span id="fileLabel">Clique para selecionar ou arraste um arquivo</span>
+                                    <div class="file-name" id="fileName">Nenhum arquivo selecionado</div>
+                                </label>
+                                <input type="file" class="form-control d-none" id="manual" name="manual" accept=".pdf,.docx">
+                                <small class="text-muted">Formatos aceitos: PDF ou Word (DOCX)</small>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <i class="bi bi-envelope"></i> Configurações de E-mail (Opcional)
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="email_origem" class="form-label">E-mail Remetente:</label>
+                                        <input type="email" class="form-control" id="email_origem" name="email_origem">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="senha_app" class="form-label">Senha do App (Gmail):</label>
+                                        <input type="password" class="form-control" id="senha_app" name="senha_app">
+                                        <small class="text-muted">Use uma senha de app do Gmail</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="email_destino" class="form-label">E-mail Destinatário:</label>
+                                        <input type="email" class="form-control" id="email_destino" name="email_destino">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="assunto" class="form-label">Assunto do E-mail:</label>
+                                        <input type="text" class="form-control" id="assunto" name="assunto" value="Relatório Técnico do Motor - IA">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <i class="bi bi-chat-square-text"></i> Observações Extras para a IA (Opcional)
+                            </div>
+                            <div class="card-body">
+                                <textarea class="form-control" id="observacoes" name="observacoes" rows="5"></textarea>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap justify-content-between mt-4">
+                            <button type="submit" name="gerar_relatorio" class="btn btn-primary btn-action mb-2">
+                                <i class="bi bi-file-earmark-text"></i> Gerar Relatório
+                            </button>
+                            <button type="submit" name="enviar_email" class="btn btn-success btn-action mb-2">
+                                <i class="bi bi-envelope"></i> Enviar por E-mail
+                            </button>
+                            <button type="button" id="limparBtn" class="btn btn-secondary btn-action mb-2">
+                                <i class="bi bi-eraser"></i> Limpar Tudo
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Mostrar nome do arquivo selecionado
+            $('#manual').change(function() {
+                if (this.files.length > 0) {
+                    $('#fileName').text(this.files[0].name);
+                } else {
+                    $('#fileName').text('Nenhum arquivo selecionado');
+                }
+            });
+
+            // Drag and drop para o arquivo
+            $('.file-input-label').on('dragover', function(e) {
+                e.preventDefault();
+                $(this).addClass('border-primary');
+            });
+
+            $('.file-input-label').on('dragleave', function(e) {
+                e.preventDefault();
+                $(this).removeClass('border-primary');
+            });
+
+            $('.file-input-label').on('drop', function(e) {
+                e.preventDefault();
+                $(this).removeClass('border-primary');
+                if (e.originalEvent.dataTransfer.files.length) {
+                    $('#manual')[0].files = e.originalEvent.dataTransfer.files;
+                    $('#fileName').text(e.originalEvent.dataTransfer.files[0].name);
+                }
+            });
+
+            // Clique no label para abrir o file input
+            $('.file-input-label').click(function() {
+                $('#manual').click();
+            });
+
+            // Limpar campos
+            $('#limparBtn').click(function() {
+                if (confirm('Tem certeza que deseja limpar todos os campos?')) {
+                    $('#mainForm')[0].reset();
+                    $('#fileName').text('Nenhum arquivo selecionado');
+                    
+                    $.post('/limpar', function(response) {
+                        if (response.status === 'success') {
+                            // Mostrar mensagem de sucesso
+                            $('<div class="alert alert-success alert-dismissible fade show" role="alert">' +
+                              'Campos limpos com sucesso!' +
+                              '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>' +
+                              '</div>').insertBefore('#mainForm');
+                        }
+                    });
+                }
+            });
+
+            // Envio do formulário para gerar relatório
+            $('button[name="gerar_relatorio"]').click(function(e) {
+                e.preventDefault();
+                
+                if (!$('#modelo_motor').val()) {
+                    alert('Por favor, informe o modelo do motor.');
+                    return;
+                }
+                
+                showLoading();
+                
+                let formData = new FormData($('#mainForm')[0]);
+                
+                $.ajax({
+                    url: '/',
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        hideLoading();
+                        
+                        if (response.status === 'success') {
+                            // Redirecionar para download
+                            window.location.href = '/download/' + response.report_id;
+                        } else {
+                            alert(response.message);
+                        }
+                    },
+                    error: function(xhr) {
+                        hideLoading();
+                        try {
+                            let response = JSON.parse(xhr.responseText);
+                            alert(response.message || 'Erro ao processar a requisição.');
+                        } catch {
+                            alert('Erro ao processar a requisição.');
+                        }
+                    }
+                });
+            });
+
+            // Funções para mostrar/ocultar loading
+            function showLoading() {
+                $('#loading').css('display', 'flex');
+            }
+
+            function hideLoading() {
+                $('#loading').hide();
+            }
+        });
+    </script>
+</body>
+</html>
