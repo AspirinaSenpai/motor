@@ -198,7 +198,7 @@ def extrair_texto_manual(arquivo):
 
 def gerar_relatorio_ia(modelo_motor, corrente_nominal, tensao_nominal, tipo_ligacao, observacoes, manual_file):
     try:
-        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+        genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
         ultimo_dado = ler_planilha()
         dados_texto = "\n".join([f"- {k}: {v}" for k, v in ultimo_dado.items()])
 
