@@ -256,12 +256,12 @@ def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, 
         msg['Subject'] = assunto
 
         corpo = f"""
-        RELATÓRIO TÉCNICO - {modelo_motor}
-        Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+RELATÓRIO TÉCNICO - {modelo_motor}
+Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 
-        Observações:
-        {observacoes if observacoes else "Nenhuma observação adicional"}
-        """
+Observações:
+{observacoes if observacoes else "Nenhuma observação adicional"}
+"""
         msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
 
         with open(pdf_path, 'rb') as f:
@@ -272,16 +272,20 @@ def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, 
         with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
             server.ehlo()
             server.starttls()
+            server.ehlo()
 
             try:
                 server.login(email_origem, senha_app)
-            except smtplib.SMTPAuthenticationError:
-                raise Exception("""
-                Falha na autenticação. Por favor:
-                1. Verifique se a verificação em duas etapas está ativada
-                2. Use uma senha de app (não sua senha normal do Gmail)
-                3. Gere uma nova senha de app se necessário
-                """)
+            except smtplib.SMTPAuthenticationError as auth_err:
+                # Mensagem de erro clara e sugestiva
+                raise Exception(
+                    "Falha na autenticação SMTP. Verifique:\n"
+                    "1. Se a verificação em duas etapas está ativada na conta.\n"
+                    "2. Se você está usando uma senha de app gerada no Google (não a senha normal).\n"
+                    "3. Se a senha de app está correta e ativa.\n"
+                    "4. Se houve bloqueio de segurança pelo Google (verifique sua conta).\n"
+                    f"Erro original: {auth_err}"
+                )
 
             server.send_message(msg)
 
