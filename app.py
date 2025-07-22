@@ -84,15 +84,19 @@ def allowed_file(filename):
 def index():
     if request.method == 'POST':
         try:
-            email_origem = request.form.get('email_origem')
-            email_destino = request.form.get('email_destino')
-            senha_app = request.form.get('senha_app')
-            assunto = request.form.get('assunto', 'Relatório Técnico do Motor - IA')
-            modelo_motor = request.form.get('modelo_motor')
-            corrente_nominal = request.form.get('corrente_nominal')
-            tensao_nominal = request.form.get('tensao_nominal')
-            tipo_ligacao = request.form.get('tipo_ligacao')
-            observacoes = request.form.get('observacoes', '')
+            # MODIFICADO: pegar do formulário com strip para evitar espaços
+            email_origem = request.form.get('email_origem', '').strip()
+            email_destino = request.form.get('email_destino', '').strip()
+            senha_app = request.form.get('senha_app', '').strip()
+            assunto = request.form.get('assunto', 'Relatório Técnico do Motor - IA').strip()
+            modelo_motor = request.form.get('modelo_motor', '').strip()
+            corrente_nominal = request.form.get('corrente_nominal', '').strip()
+            tensao_nominal = request.form.get('tensao_nominal', '').strip()
+            tipo_ligacao = request.form.get('tipo_ligacao', '').strip()
+            observacoes = request.form.get('observacoes', '').strip()
+
+            # MODIFICADO: log simples para ajudar debug (cuidado para não logar senha real!)
+            app.logger.info(f"Dados recebidos: email_origem='{email_origem}', email_destino='{email_destino}', senha_app tamanho={len(senha_app)}")
 
             if 'gerar_relatorio' in request.form:
                 if not modelo_motor:
@@ -120,8 +124,9 @@ def index():
                 })
 
             elif 'enviar_email' in request.form:
+                # MODIFICADO: validação mais rigorosa dos campos
                 if not all([email_origem, email_destino, senha_app, modelo_motor]):
-                    flash('Por favor, preencha todos os campos obrigatórios.', 'error')
+                    flash('Por favor, preencha todos os campos obrigatórios (e-mail, senha, modelo).', 'error')
                     return redirect(url_for('index'))
 
                 relatorio = gerar_relatorio_ia(
@@ -277,7 +282,6 @@ Observações:
             try:
                 server.login(email_origem, senha_app)
             except smtplib.SMTPAuthenticationError as auth_err:
-                # Mensagem de erro clara e sugestiva
                 raise Exception(
                     "Falha na autenticação SMTP. Verifique:\n"
                     "1. Se a verificação em duas etapas está ativada na conta.\n"
