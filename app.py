@@ -19,6 +19,7 @@ import tempfile
 import uuid
 from io import BytesIO
 import logging
+import json
 
 # Configuração básica do Flask
 app = Flask(__name__)
@@ -70,7 +71,7 @@ class PDFRelatorio(FPDF):
         }
         for orig, sub in substituicoes.items():
             texto = texto.replace(orig, sub)
-        
+
         try:
             return texto.encode('latin-1', 'ignore').decode('latin-1')
         except:
@@ -153,7 +154,6 @@ def index():
 def download_report(report_id):
     try:
         pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f'report_{report_id}.pdf')
-        
         if not os.path.exists(pdf_path):
             flash('Relatório não encontrado ou expirado.', 'error')
             return redirect(url_for('index'))
@@ -196,48 +196,12 @@ def extrair_texto_manual(arquivo):
         logger.error(f"Erro ao extrair texto do manual: {str(e)}")
         return ""
 
-def ler_planilha():
-    try:
-        SERVICE_ACCOUNT_FILE = os.path.join(os.getcwd(), 'gen-lang-client-0707507427-c275385a009d.json')
-        if not os.path.exists(SERVICE_ACCOUNT_FILE):
-            raise FileNotFoundError(f"Arquivo de credenciais não encontrado: {SERVICE_ACCOUNT_FILE}")
-
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
-        SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
-
-        creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-        creds.refresh(Request())
-
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-        valores = sheet.get_all_values()
-
-        if not valores or len(valores) < 2:
-            return {}
-
-        cabecalho = valores[0]
-        ult_linha = valores[-1]
-        ultimo_dado = dict(zip(cabecalho, ult_linha))
-
-        for chave in ultimo_dado:
-            valor = ultimo_dado[chave]
-            if isinstance(valor, str) and "," in valor:
-                try:
-                    ultimo_dado[chave] = float(valor.replace(",", "."))
-                except ValueError:
-                    pass
-
-        return ultimo_dado
-    except Exception as e:
-        logger.error(f"Erro ao acessar planilha: {str(e)}")
-        return {}
-
 def gerar_relatorio_ia(modelo_motor, corrente_nominal, tensao_nominal, tipo_ligacao, observacoes, manual_file):
     try:
-        genai.configure(api_key=os.getenv('GEMINI_API_KEY', 'AIzaSyAza9XWD0-nyO2FRwhWzowIl9e1_k-FJgs'))
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
         ultimo_dado = ler_planilha()
         dados_texto = "\n".join([f"- {k}: {v}" for k, v in ultimo_dado.items()])
-        
+
         info_motor = f"""
 INFORMAÇÕES DO MOTOR:
 - Modelo: {modelo_motor}
@@ -280,41 +244,35 @@ def criar_pdf(relatorio, output):
 
 def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, observacoes, pdf_path):
     try:
-        # Verificação inicial
         if not all([email_origem, email_destino, senha_app]):
             raise ValueError("E-mail remetente, destinatário e senha são obrigatórios")
 
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"Arquivo PDF não encontrado: {pdf_path}")
 
-        # Configuração da mensagem
         msg = MIMEMultipart()
         msg['From'] = email_origem
         msg['To'] = email_destino
         msg['Subject'] = assunto
-        
-        # Corpo do e-mail
+
         corpo = f"""
         RELATÓRIO TÉCNICO - {modelo_motor}
         Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
-        
+
         Observações:
         {observacoes if observacoes else "Nenhuma observação adicional"}
         """
         msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
 
-        # Anexar PDF
         with open(pdf_path, 'rb') as f:
             part = MIMEApplication(f.read(), _subtype='pdf')
-            part.add_header('Content-Disposition', 'attachment', 
-                          filename=f'Relatorio_{modelo_motor}.pdf')
+            part.add_header('Content-Disposition', 'attachment', filename=f'Relatorio_{modelo_motor}.pdf')
             msg.attach(part)
 
-        # Envio com tratamento específico para erros SMTP
         with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
             server.ehlo()
             server.starttls()
-            
+
             try:
                 server.login(email_origem, senha_app)
             except smtplib.SMTPAuthenticationError:
@@ -324,13 +282,13 @@ def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, 
                 2. Use uma senha de app (não sua senha normal do Gmail)
                 3. Gere uma nova senha de app se necessário
                 """)
-                
+
             server.send_message(msg)
-            
+
     except Exception as e:
         app.logger.error(f"Erro no envio de e-mail: {str(e)}")
         raise
-        
+
 @app.route('/limpar', methods=['POST'])
 def limpar_campos():
     try:
@@ -346,6 +304,43 @@ def limpar_campos():
             'status': 'error',
             'message': 'Erro ao limpar campos'
         }), 500
+
+def ler_planilha():
+    try:
+        SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+        SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
+
+        json_str = os.getenv("GOOGLE_CREDENTIALS_JSON")
+        if not json_str:
+            raise EnvironmentError("Variável de ambiente GOOGLE_CREDENTIALS_JSON não encontrada.")
+
+        creds_dict = json.loads(json_str)
+        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
+        creds.refresh(Request())
+
+        client = gspread.authorize(creds)
+        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
+        valores = sheet.get_all_values()
+
+        if not valores or len(valores) < 2:
+            return {}
+
+        cabecalho = valores[0]
+        ult_linha = valores[-1]
+        ultimo_dado = dict(zip(cabecalho, ult_linha))
+
+        for chave in ultimo_dado:
+            valor = ultimo_dado[chave]
+            if isinstance(valor, str) and "," in valor:
+                try:
+                    ultimo_dado[chave] = float(valor.replace(",", "."))
+                except ValueError:
+                    pass
+
+        return ultimo_dado
+    except Exception as e:
+        logger.error(f"Erro ao acessar planilha: {str(e)}")
+        return {}
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
