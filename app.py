@@ -1,334 +1,95 @@
-# app.py
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash, jsonify
-from werkzeug.utils import secure_filename
-import smtplib  # ainda importado só se quiser manter código antigo comentado
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.mime.application import MIMEApplication
-from google.oauth2.service_account import Credentials
-from google.auth.transport.requests import Request
-import gspread
-import google.generativeai as genai
-from fpdf import FPDF
 import os
-import time
-from datetime import datetime
-import PyPDF2
-import docx
-import tempfile
-import uuid
-from io import BytesIO
-import logging
-import json
-import base64
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
-
-# Configuração básica do Flask
-app = Flask(__name__)
-app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-key-insecure-change-me')
-
-# Configuração de logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Configurações
-UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), 'motor_reports')
-if not os.path.exists(UPLOAD_FOLDER):
-    os.makedirs(UPLOAD_FOLDER)
-
-ALLOWED_EXTENSIONS = {'pdf', 'docx'}
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
+from fpdf import FPDF
+import base64
+import datetime
 
 class PDFRelatorio(FPDF):
     def __init__(self):
         super().__init__()
-        self.set_auto_page_break(auto=True, margin=15)
         self.add_page()
-        self.set_left_margin(15)
-        self.set_right_margin(15)
-        self.set_font("Helvetica", size=12)
+        self.set_font("Arial", size=12)
 
-    def header(self):
-        data = datetime.now().strftime("Data: %d/%m/%Y - %H:%M:%S")
-        self.set_font("Helvetica", 'B', 14)
-        self.cell(0, 10, "Relatório Técnico do Motor", ln=True, align='C')
-        self.set_font("Helvetica", '', 10)
-        self.cell(0, 10, data, ln=True, align='C')
-        self.ln(5)
+    def adicionar_texto(self, texto):
+        self.multi_cell(0, 10, texto)
 
-    def add_relatorio(self, texto):
-        texto = self.limpar_caracteres_especiais(texto)
-        for linha in texto.split("\n"):
-            linha = linha.strip()
-            if linha:
-                self.multi_cell(0, 8, linha)
-                self.ln(1)
+    def salvar(self, caminho):
+        self.output(caminho)
 
-    def limpar_caracteres_especiais(self, texto):
-        substituicoes = {
-            '–': '-', '—': '-', '´': "'", '“': '"', '”': '"',
-            '‘': "'", '’': "'", '…': '...', '®': '(R)',
-            '©': '(C)', '™': '(TM)'
-        }
-        for orig, sub in substituicoes.items():
-            texto = texto.replace(orig, sub)
+def enviar_email(destinatario, assunto, corpo, caminho_anexo=None):
+    api_key = os.environ.get("SENDGRID_API_KEY")
+    if not api_key:
+        print("Erro: SENDGRID_API_KEY não definida.")
+        return
 
+    mensagem = Mail(
+        from_email='seu_email_verificado@seudominio.com',
+        to_emails=destinatario,
+        subject=assunto,
+        html_content=corpo
+    )
+
+    if caminho_anexo:
         try:
-            return texto.encode('latin-1', 'ignore').decode('latin-1')
-        except:
-            return texto
+            with open(caminho_anexo, 'rb') as f:
+                data = f.read()
+                f_encoded = base64.b64encode(data).decode()
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        try:
-            email_origem = request.form.get('email_origem')
-            email_destino = request.form.get('email_destino')
-            senha_app = request.form.get('senha_app')  # Não mais usado para SMTP antigo, mas mantido para o formulário
-            assunto = request.form.get('assunto', 'Relatório Técnico do Motor - IA')
-            modelo_motor = request.form.get('modelo_motor')
-            corrente_nominal = request.form.get('corrente_nominal')
-            tensao_nominal = request.form.get('tensao_nominal')
-            tipo_ligacao = request.form.get('tipo_ligacao')
-            observacoes = request.form.get('observacoes', '')
-
-            if 'gerar_relatorio' in request.form:
-                if not modelo_motor:
-                    flash('Por favor, informe o modelo do motor.', 'error')
-                    return redirect(url_for('index'))
-
-                relatorio = gerar_relatorio_ia(
-                    modelo_motor, corrente_nominal, tensao_nominal,
-                    tipo_ligacao, observacoes, request.files.get('manual')
-                )
-
-                pdf_buffer = BytesIO()
-                criar_pdf(relatorio, pdf_buffer)
-                pdf_buffer.seek(0)
-
-                report_id = str(uuid.uuid4())
-                pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f'report_{report_id}.pdf')
-                with open(pdf_path, 'wb') as f:
-                    f.write(pdf_buffer.getvalue())
-
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Relatório gerado com sucesso!',
-                    'report_id': report_id
-                })
-
-            elif 'enviar_email' in request.form:
-                if not all([email_origem, email_destino, assunto, modelo_motor]):
-                    flash('Por favor, preencha todos os campos obrigatórios.', 'error')
-                    return redirect(url_for('index'))
-
-                relatorio = gerar_relatorio_ia(
-                    modelo_motor, corrente_nominal, tensao_nominal,
-                    tipo_ligacao, observacoes, request.files.get('manual')
-                )
-
-                temp_pdf = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_{uuid.uuid4()}.pdf')
-                criar_pdf(relatorio, temp_pdf)
-
-                # Usar SendGrid para enviar email
-                enviar_email_sendgrid(
-                    email_origem, email_destino, assunto, observacoes, temp_pdf
-                )
-
-                if os.path.exists(temp_pdf):
-                    os.remove(temp_pdf)
-
-                flash('E-mail enviado com sucesso!', 'success')
-                return redirect(url_for('index'))
-
+            anexo = Attachment(
+                FileContent(f_encoded),
+                FileName(os.path.basename(caminho_anexo)),
+                FileType("application/pdf"),
+                Disposition("attachment")
+            )
+            mensagem.attachment = anexo
         except Exception as e:
-            logger.error(f"Erro no processamento: {str(e)}")
-            flash(f'Erro no processamento: {str(e)}', 'error')
-            return redirect(url_for('index'))
+            print(f"Erro ao anexar arquivo: {e}")
+            return
 
-    return render_template('index.html')
-
-@app.route('/download/<report_id>')
-def download_report(report_id):
     try:
-        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f'report_{report_id}.pdf')
-        if not os.path.exists(pdf_path):
-            flash('Relatório não encontrado ou expirado.', 'error')
-            return redirect(url_for('index'))
-
-        return send_file(
-            pdf_path,
-            as_attachment=True,
-            download_name=f'relatorio_motor_{report_id[:8]}.pdf',
-            mimetype='application/pdf'
-        )
+        sg = SendGridAPIClient(api_key)
+        resposta = sg.send(mensagem)
+        print(f"E-mail enviado! Status: {resposta.status_code}")
     except Exception as e:
-        logger.error(f"Erro ao baixar relatório: {str(e)}")
-        flash('Erro ao baixar relatório.', 'error')
-        return redirect(url_for('index'))
+        print(f"Erro no envio do e-mail: {e}")
 
-def extrair_texto_manual(arquivo):
-    try:
-        if not arquivo or not allowed_file(arquivo.filename):
-            return ""
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Gerador de Relatório")
+        self.geometry("400x300")
 
-        filename = secure_filename(arquivo.filename)
-        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        arquivo.save(temp_path)
-        texto = ""
+        ttk.Label(self, text="Destinatário:").pack(pady=5)
+        self.email_entry = ttk.Entry(self, width=50)
+        self.email_entry.pack(pady=5)
 
-        try:
-            if filename.lower().endswith('.pdf'):
-                with open(temp_path, 'rb') as f:
-                    leitor = PyPDF2.PdfReader(f)
-                    texto = "\n".join([pagina.extract_text() for pagina in leitor.pages if pagina.extract_text()])
-            elif filename.lower().endswith('.docx'):
-                doc = docx.Document(temp_path)
-                texto = "\n".join([para.text for para in doc.paragraphs])
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
+        ttk.Label(self, text="Texto do Relatório:").pack(pady=5)
+        self.texto_entry = tk.Text(self, height=6, width=50)
+        self.texto_entry.pack(pady=5)
 
-        return texto
-    except Exception as e:
-        logger.error(f"Erro ao extrair texto do manual: {str(e)}")
-        return ""
+        ttk.Button(self, text="Gerar e Enviar", command=self.gerar_e_enviar).pack(pady=10)
 
-def gerar_relatorio_ia(modelo_motor, corrente_nominal, tensao_nominal, tipo_ligacao, observacoes, manual_file):
-    try:
-        genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
-        ultimo_dado = ler_planilha()
-        dados_texto = "\n".join([f"- {k}: {v}" for k, v in ultimo_dado.items()])
+    def gerar_e_enviar(self):
+        email = self.email_entry.get()
+        texto = self.texto_entry.get("1.0", tk.END).strip()
 
-        info_motor = f"""
-INFORMAÇÕES DO MOTOR:
-- Modelo: {modelo_motor}
-- Corrente Nominal: {corrente_nominal} A
-- Tensão Nominal: {tensao_nominal} V
-- Tipo de Ligação: {tipo_ligacao}
-"""
+        if not email or not texto:
+            messagebox.showerror("Erro", "Preencha todos os campos.")
+            return
 
-        manual_texto = extrair_texto_manual(manual_file) if manual_file and allowed_file(manual_file.filename) else ""
-
-        prompt = f"""
-Você é um técnico especialista em manutenção de motores elétricos.
-
-{info_motor}
-
-DADOS COLETADOS DO MOTOR:
-{dados_texto}
-
-{manual_texto if not manual_texto else f"MANUAL/FICHA TÉCNICA:\n{manual_texto}"}
-
-{'OBSERVAÇÕES EXTRAS DO USUÁRIO:\n' + observacoes + '\n\n' if observacoes else ''}
-
-Faça uma análise técnica detalhada considerando todas essas informações.
-"""
-        model = genai.GenerativeModel("gemini-2.5-pro")
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        logger.error(f"Erro ao gerar relatório IA: {str(e)}")
-        raise
-
-def criar_pdf(relatorio, output):
-    try:
         pdf = PDFRelatorio()
-        pdf.add_relatorio(relatorio)
-        pdf.output(output)
-    except Exception as e:
-        logger.error(f"Erro ao criar PDF: {str(e)}")
-        raise
+        pdf.adicionar_texto(texto)
 
-# Função nova: Envio de e-mail via SendGrid
-def enviar_email_sendgrid(email_origem, email_destino, assunto, observacoes, caminho_pdf):
-    try:
-        with open(caminho_pdf, "rb") as f:
-            pdf_data = f.read()
+        nome_arquivo = f"relatorio_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        caminho_pdf = os.path.join(os.getcwd(), nome_arquivo)
+        pdf.salvar(caminho_pdf)
 
-        encoded_file = base64.b64encode(pdf_data).decode()
+        enviar_email(email, "Relatório Gerado", "Segue em anexo o relatório solicitado.", caminho_pdf)
+        messagebox.showinfo("Sucesso", f"Relatório enviado para {email}.")
 
-        message = Mail(
-            from_email=email_origem,
-            to_emails=email_destino,
-            subject=assunto,
-            plain_text_content="Segue em anexo o relatório técnico do motor gerado por IA.\n\n" + (observacoes or "")
-        )
-
-        attachment = Attachment(
-            FileContent(encoded_file),
-            FileName("relatorio_motor.pdf"),
-            FileType("application/pdf"),
-            Disposition("attachment")
-        )
-        message.attachment = attachment
-
-        sg = SendGridAPIClient(os.getenv('SENDGRID_API_KEY'))
-        response = sg.send(message)
-        if response.status_code not in (200, 202):
-            raise Exception(f"Falha ao enviar email: status {response.status_code}")
-    except Exception as e:
-        app.logger.error(f"Erro no envio de e-mail via SendGrid: {str(e)}")
-        raise
-
-@app.route('/limpar', methods=['POST'])
-def limpar_campos():
-    try:
-        logger.info("Solicitação de limpeza recebida")
-        return jsonify({
-            'status': 'success',
-            'message': 'Campos limpos com sucesso!',
-            'timestamp': datetime.now().isoformat()
-        })
-    except Exception as e:
-        logger.error(f"Erro ao limpar campos: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': 'Erro ao limpar campos'
-        }), 500
-
-def ler_planilha():
-    try:
-        SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
-        SPREADSHEET_ID = "1vsWF18ozVUx3B296GtQYXncYHsG6ihhod6ViAKF7bR0"
-
-        json_str = os.getenv("GOOGLE_CREDENTIALS_JSON")
-        if not json_str:
-            raise EnvironmentError("Variável de ambiente GOOGLE_CREDENTIALS_JSON não encontrada.")
-
-        creds_dict = json.loads(json_str)
-        creds = Credentials.from_service_account_info(creds_dict, scopes=SCOPES)
-        creds.refresh(Request())
-
-        client = gspread.authorize(creds)
-        sheet = client.open_by_key(SPREADSHEET_ID).sheet1
-        valores = sheet.get_all_values()
-
-        if not valores or len(valores) < 2:
-            return {}
-
-        cabecalho = valores[0]
-        ult_linha = valores[-1]
-        ultimo_dado = dict(zip(cabecalho, ult_linha))
-
-        for chave in ultimo_dado:
-            valor = ultimo_dado[chave]
-            if isinstance(valor, str) and "," in valor:
-                try:
-                    ultimo_dado[chave] = float(valor.replace(",", "."))
-                except ValueError:
-                    pass
-
-        return ultimo_dado
-    except Exception as e:
-        logger.error(f"Erro ao acessar planilha: {str(e)}")
-        return {}
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
