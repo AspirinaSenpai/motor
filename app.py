@@ -1,7 +1,7 @@
 # app.py
 from flask import Flask, render_template, request, redirect, url_for, send_file, flash, jsonify
 from werkzeug.utils import secure_filename
-import smtplib
+import smtplib  # ainda importado só se quiser manter código antigo comentado
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
@@ -20,6 +20,9 @@ import uuid
 from io import BytesIO
 import logging
 import json
+import base64
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
 
 # Configuração básica do Flask
 app = Flask(__name__)
@@ -84,19 +87,15 @@ def allowed_file(filename):
 def index():
     if request.method == 'POST':
         try:
-            # MODIFICADO: pegar do formulário com strip para evitar espaços
-            email_origem = request.form.get('email_origem', '').strip()
-            email_destino = request.form.get('email_destino', '').strip()
-            senha_app = request.form.get('senha_app', '').strip()
-            assunto = request.form.get('assunto', 'Relatório Técnico do Motor - IA').strip()
-            modelo_motor = request.form.get('modelo_motor', '').strip()
-            corrente_nominal = request.form.get('corrente_nominal', '').strip()
-            tensao_nominal = request.form.get('tensao_nominal', '').strip()
-            tipo_ligacao = request.form.get('tipo_ligacao', '').strip()
-            observacoes = request.form.get('observacoes', '').strip()
-
-            # MODIFICADO: log simples para ajudar debug (cuidado para não logar senha real!)
-            app.logger.info(f"Dados recebidos: email_origem='{email_origem}', email_destino='{email_destino}', senha_app tamanho={len(senha_app)}")
+            email_origem = request.form.get('email_origem')
+            email_destino = request.form.get('email_destino')
+            senha_app = request.form.get('senha_app')  # Não mais usado para SMTP antigo, mas mantido para o formulário
+            assunto = request.form.get('assunto', 'Relatório Técnico do Motor - IA')
+            modelo_motor = request.form.get('modelo_motor')
+            corrente_nominal = request.form.get('corrente_nominal')
+            tensao_nominal = request.form.get('tensao_nominal')
+            tipo_ligacao = request.form.get('tipo_ligacao')
+            observacoes = request.form.get('observacoes', '')
 
             if 'gerar_relatorio' in request.form:
                 if not modelo_motor:
@@ -124,9 +123,8 @@ def index():
                 })
 
             elif 'enviar_email' in request.form:
-                # MODIFICADO: validação mais rigorosa dos campos
-                if not all([email_origem, email_destino, senha_app, modelo_motor]):
-                    flash('Por favor, preencha todos os campos obrigatórios (e-mail, senha, modelo).', 'error')
+                if not all([email_origem, email_destino, assunto, modelo_motor]):
+                    flash('Por favor, preencha todos os campos obrigatórios.', 'error')
                     return redirect(url_for('index'))
 
                 relatorio = gerar_relatorio_ia(
@@ -137,9 +135,9 @@ def index():
                 temp_pdf = os.path.join(app.config['UPLOAD_FOLDER'], f'temp_{uuid.uuid4()}.pdf')
                 criar_pdf(relatorio, temp_pdf)
 
-                enviar_email(
-                    email_origem, email_destino, senha_app, assunto,
-                    modelo_motor, observacoes, temp_pdf
+                # Usar SendGrid para enviar email
+                enviar_email_sendgrid(
+                    email_origem, email_destino, assunto, observacoes, temp_pdf
                 )
 
                 if os.path.exists(temp_pdf):
@@ -247,54 +245,35 @@ def criar_pdf(relatorio, output):
         logger.error(f"Erro ao criar PDF: {str(e)}")
         raise
 
-def enviar_email(email_origem, email_destino, senha_app, assunto, modelo_motor, observacoes, pdf_path):
+# Função nova: Envio de e-mail via SendGrid
+def enviar_email_sendgrid(email_origem, email_destino, assunto, observacoes, caminho_pdf):
     try:
-        if not all([email_origem, email_destino, senha_app]):
-            raise ValueError("E-mail remetente, destinatário e senha são obrigatórios")
+        with open(caminho_pdf, "rb") as f:
+            pdf_data = f.read()
 
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"Arquivo PDF não encontrado: {pdf_path}")
+        encoded_file = base64.b64encode(pdf_data).decode()
 
-        msg = MIMEMultipart()
-        msg['From'] = email_origem
-        msg['To'] = email_destino
-        msg['Subject'] = assunto
+        message = Mail(
+            from_email=email_origem,
+            to_emails=email_destino,
+            subject=assunto,
+            plain_text_content="Segue em anexo o relatório técnico do motor gerado por IA.\n\n" + (observacoes or "")
+        )
 
-        corpo = f"""
-RELATÓRIO TÉCNICO - {modelo_motor}
-Data: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+        attachment = Attachment(
+            FileContent(encoded_file),
+            FileName("relatorio_motor.pdf"),
+            FileType("application/pdf"),
+            Disposition("attachment")
+        )
+        message.attachment = attachment
 
-Observações:
-{observacoes if observacoes else "Nenhuma observação adicional"}
-"""
-        msg.attach(MIMEText(corpo, 'plain', 'utf-8'))
-
-        with open(pdf_path, 'rb') as f:
-            part = MIMEApplication(f.read(), _subtype='pdf')
-            part.add_header('Content-Disposition', 'attachment', filename=f'Relatorio_{modelo_motor}.pdf')
-            msg.attach(part)
-
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-
-            try:
-                server.login(email_origem, senha_app)
-            except smtplib.SMTPAuthenticationError as auth_err:
-                raise Exception(
-                    "Falha na autenticação SMTP. Verifique:\n"
-                    "1. Se a verificação em duas etapas está ativada na conta.\n"
-                    "2. Se você está usando uma senha de app gerada no Google (não a senha normal).\n"
-                    "3. Se a senha de app está correta e ativa.\n"
-                    "4. Se houve bloqueio de segurança pelo Google (verifique sua conta).\n"
-                    f"Erro original: {auth_err}"
-                )
-
-            server.send_message(msg)
-
+        sg = SendGridAPIClient(os.getenv('SENDGRID_API_KEY'))
+        response = sg.send(message)
+        if response.status_code not in (200, 202):
+            raise Exception(f"Falha ao enviar email: status {response.status_code}")
     except Exception as e:
-        app.logger.error(f"Erro no envio de e-mail: {str(e)}")
+        app.logger.error(f"Erro no envio de e-mail via SendGrid: {str(e)}")
         raise
 
 @app.route('/limpar', methods=['POST'])
